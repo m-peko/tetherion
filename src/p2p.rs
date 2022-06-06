@@ -149,7 +149,7 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             .expect("there is at least one block");
         let block = Block::new(
             latest_block.id + 1,
-            latest_block.hash.clone(),
+            &latest_block.hash,
             data.to_owned(),
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
