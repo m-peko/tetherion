@@ -41,31 +41,34 @@ pub enum EventType {
 }
 
 #[derive(NetworkBehaviour)]
-pub struct AppBehaviour {
+pub struct TetherionBehaviour {
     pub floodsub: Floodsub,
     pub mdns: Mdns,
+
     #[behaviour(ignore)]
     pub response_sender: mpsc::UnboundedSender<ChainResponse>,
+
     #[behaviour(ignore)]
     pub init_sender: mpsc::UnboundedSender<bool>,
+
     #[behaviour(ignore)]
-    pub app: Tetherion<String>,
+    pub tetherion: Tetherion<String>
 }
 
-impl AppBehaviour {
+impl TetherionBehaviour {
     pub async fn new(
-        app: Tetherion<String>,
+        tetherion: Tetherion<String>,
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
         let mut behaviour = Self {
-            app,
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
                 .expect("can create mdns"),
             response_sender,
             init_sender,
+            tetherion
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_TOPIC.clone());
@@ -95,7 +98,7 @@ impl AppBehaviour {
 }
 
 // incoming event handler
-impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
+impl NetworkBehaviourEventProcess<FloodsubEvent> for TetherionBehaviour {
     fn inject_event(&mut self, event: FloodsubEvent) {
         if let FloodsubEvent::Message(msg) = event {
             if let Ok(resp) = serde_json::from_slice::<ChainResponse>(&msg.data) {
@@ -105,14 +108,14 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
 
                     let mut remote = Tetherion::<String>::new(String::from("genesis"), 2);
                     remote.blocks = resp.blocks;
-                    self.app = self.choose_chain(self.app.clone(), remote);
+                    self.tetherion = self.choose_chain(self.tetherion.clone(), remote);
                 }
             } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
                 info!("sending local chain to {}", msg.source.to_string());
                 let peer_id = resp.from_peer_id;
                 if PEER_ID.to_string() == peer_id {
                     if let Err(e) = self.response_sender.send(ChainResponse {
-                        blocks: self.app.blocks.clone(),
+                        blocks: self.tetherion.blocks.clone(),
                         receiver: msg.source.to_string(),
                     }) {
                         error!("error sending response via channel, {}", e);
@@ -120,7 +123,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }
             } else if let Ok(block) = serde_json::from_slice::<Block<String>>(&msg.data) {
                 info!("received new block from {}", msg.source.to_string());
-                match self.app.add_block(block) {
+                match self.tetherion.add_block(block) {
                     Ok(()) => (),
                     Err(err) => error!("Error {}", err)
                 }
@@ -129,7 +132,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
     }
 }
 
-impl NetworkBehaviourEventProcess<MdnsEvent> for AppBehaviour {
+impl NetworkBehaviourEventProcess<MdnsEvent> for TetherionBehaviour {
     fn inject_event(&mut self, event: MdnsEvent) {
         match event {
             MdnsEvent::Discovered(discovered_list) => {
@@ -148,7 +151,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for AppBehaviour {
     }
 }
 
-pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
+pub fn get_list_peers(swarm: &Swarm<TetherionBehaviour>) -> Vec<String> {
     info!("Discovered Peers:");
     let nodes = swarm.behaviour().mdns.discovered_nodes();
     let mut unique_peers = HashSet::new();
@@ -158,23 +161,23 @@ pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
     unique_peers.iter().map(|p| p.to_string()).collect()
 }
 
-pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_peers(swarm: &Swarm<TetherionBehaviour>) {
     let peers = get_list_peers(swarm);
     peers.iter().for_each(|p| info!("{}", p));
 }
 
-pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_chain(swarm: &Swarm<TetherionBehaviour>) {
     info!("Local Blockchain:");
     let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().app.blocks).expect("can jsonify blocks");
+        serde_json::to_string_pretty(&swarm.behaviour().tetherion.blocks).expect("can jsonify blocks");
     info!("{}", pretty_json);
 }
 
-pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
+pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<TetherionBehaviour>) {
     if let Some(data) = cmd.strip_prefix("create b") {
         let behaviour = swarm.behaviour_mut();
         let latest_block = behaviour
-            .app
+            .tetherion
             .blocks
             .last()
             .expect("there is at least one block");
@@ -185,7 +188,7 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             2
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
-        behaviour.app.blocks.push(block);
+        behaviour.tetherion.blocks.push(block);
         info!("broadcasting new block");
         behaviour
             .floodsub
