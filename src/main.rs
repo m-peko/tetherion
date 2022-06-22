@@ -1,3 +1,5 @@
+/// Copyright (c) 2022 Tetherion
+
 use libp2p::{
     core::upgrade,
     futures::StreamExt,

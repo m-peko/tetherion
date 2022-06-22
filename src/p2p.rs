@@ -1,3 +1,5 @@
+/// Copyright (c) 2022 Tetherion
+
 use crate::{
     block::Block,
     tetherion::Tetherion
