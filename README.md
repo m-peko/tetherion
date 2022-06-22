@@ -1,2 +1,3 @@
-# cateno
+# Tetherion
+
 Generic blockchain
