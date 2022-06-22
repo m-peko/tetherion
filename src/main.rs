@@ -7,7 +7,7 @@ use libp2p::{
     tcp::TokioTcpConfig,
     Transport,
 };
-use log::{error, info, warn};
+use log::{error, info};
 use std::time::Duration;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
@@ -17,84 +17,8 @@ use tokio::{
 };
 
 mod block;
-
 mod p2p;
-
-type Block = block::Block<String>;
-
-pub struct App {
-    pub blocks: Vec<Block>,
-}
-
-impl App {
-    fn new() -> Self {
-        Self { blocks: vec![] }
-    }
-
-    fn genesis(&mut self) {
-        self.blocks.push(Block::genesis(String::from("genesis!")));
-    }
-
-    fn try_add_block(&mut self, block: Block) {
-        let latest_block = self.blocks.last().expect("there is at least one block");
-        if self.is_block_valid(&block, latest_block) {
-            self.blocks.push(block);
-        } else {
-            error!("could not add block - invalid");
-        }
-    }
-
-    fn is_block_valid(&self, block: &Block, previous_block: &Block) -> bool {
-        if block.previous_hash != previous_block.hash {
-            warn!("block with id: {} has wrong previous hash", block.id);
-            return false;
-        } else if !block.is_valid() {
-            warn!("block with id: {} has invalid difficulty with hash: {}", block.id, block.hash);
-            return false;
-        } else if block.id != previous_block.id + 1 {
-            warn!(
-                "block with id: {} is not the next block after the latest: {}",
-                block.id, previous_block.id
-            );
-            return false;
-        }
-        true
-    }
-
-    fn is_chain_valid(&self, chain: &[Block]) -> bool {
-        for i in 0..chain.len() {
-            if i == 0 {
-                continue;
-            }
-            let first = chain.get(i - 1).expect("has to exist");
-            let second = chain.get(i).expect("has to exist");
-            if !self.is_block_valid(second, first) {
-                return false;
-            }
-        }
-        true
-    }
-
-    // We always choose the longest valid chain
-    fn choose_chain(&mut self, local: Vec<Block>, remote: Vec<Block>) -> Vec<Block> {
-        let is_local_valid = self.is_chain_valid(&local);
-        let is_remote_valid = self.is_chain_valid(&remote);
-
-        if is_local_valid && is_remote_valid {
-            if local.len() >= remote.len() {
-                local
-            } else {
-                remote
-            }
-        } else if is_remote_valid && !is_local_valid {
-            remote
-        } else if !is_remote_valid && is_local_valid {
-            local
-        } else {
-            panic!("local and remote chains are both invalid");
-        }
-    }
-}
+mod tetherion;
 
 #[tokio::main]
 async fn main() {
@@ -114,7 +38,7 @@ async fn main() {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 
-    let behaviour = p2p::AppBehaviour::new(App::new(), response_sender, init_sender.clone()).await;
+    let behaviour = p2p::AppBehaviour::new(tetherion::Tetherion::<String>::new(String::from("genesis"), 2), response_sender, init_sender.clone()).await;
 
     let mut swarm = SwarmBuilder::new(transp, behaviour, *p2p::PEER_ID)
         .executor(Box::new(|fut| {
@@ -159,7 +83,6 @@ async fn main() {
             match event {
                 p2p::EventType::Init => {
                     let peers = p2p::get_list_peers(&swarm);
-                    swarm.behaviour_mut().app.genesis();
 
                     info!("connected nodes: {}", peers.len());
                     if !peers.is_empty() {

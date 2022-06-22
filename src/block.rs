@@ -1,4 +1,4 @@
-/// Copyright (c) 2022 Catena
+/// Copyright (c) 2022 Tetherion
 
 use {
     serde::{Deserialize, Serialize},

@@ -1,4 +1,8 @@
-use super::{App, Block};
+use crate::{
+    block::Block,
+    tetherion::Tetherion
+};
+
 use libp2p::{
     floodsub::{Floodsub, FloodsubEvent, Topic},
     identity,
@@ -19,7 +23,7 @@ pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChainResponse {
-    pub blocks: Vec<Block>,
+    pub blocks: Vec<Block<String>>,
     pub receiver: String,
 }
 
@@ -43,12 +47,12 @@ pub struct AppBehaviour {
     #[behaviour(ignore)]
     pub init_sender: mpsc::UnboundedSender<bool>,
     #[behaviour(ignore)]
-    pub app: App,
+    pub app: Tetherion<String>,
 }
 
 impl AppBehaviour {
     pub async fn new(
-        app: App,
+        app: Tetherion<String>,
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
@@ -66,6 +70,26 @@ impl AppBehaviour {
 
         behaviour
     }
+
+    // We always choose the longest valid chain
+    fn choose_chain(&self, local: Tetherion<String>, remote: Tetherion<String>) -> Tetherion<String> {
+        let is_local_valid = local.is_valid().is_ok();
+        let is_remote_valid = remote.is_valid().is_ok();
+
+        if is_local_valid && is_remote_valid {
+            if local.blocks.len() >= remote.blocks.len() {
+                local
+            } else {
+                remote
+            }
+        } else if is_remote_valid && !is_local_valid {
+            remote
+        } else if !is_remote_valid && is_local_valid {
+            local
+        } else {
+            panic!("local and remote chains are both invalid");
+        }
+    }
 }
 
 // incoming event handler
@@ -77,7 +101,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     info!("Response from {}:", msg.source);
                     resp.blocks.iter().for_each(|r| info!("{:?}", r));
 
-                    self.app.blocks = self.app.choose_chain(self.app.blocks.clone(), resp.blocks);
+                    let mut remote = Tetherion::<String>::new(String::from("genesis"), 2);
+                    remote.blocks = resp.blocks;
+                    self.app = self.choose_chain(self.app.clone(), remote);
                 }
             } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
                 info!("sending local chain to {}", msg.source.to_string());
@@ -90,9 +116,12 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         error!("error sending response via channel, {}", e);
                     }
                 }
-            } else if let Ok(block) = serde_json::from_slice::<Block>(&msg.data) {
+            } else if let Ok(block) = serde_json::from_slice::<Block<String>>(&msg.data) {
                 info!("received new block from {}", msg.source.to_string());
-                self.app.try_add_block(block);
+                match self.app.add_block(block) {
+                    Ok(()) => (),
+                    Err(err) => error!("Error {}", err)
+                }
             }
         }
     }
@@ -147,10 +176,11 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             .blocks
             .last()
             .expect("there is at least one block");
-        let block = Block::new(
+        let block = Block::<String>::new(
             latest_block.id + 1,
             &latest_block.hash,
             data.to_owned(),
+            2
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
         behaviour.app.blocks.push(block);
