@@ -1,18 +1,20 @@
 /// Copyright (c) 2022 Tetherion
 
-use crate::{
-    block::Block,
-    tetherion::Tetherion
+use {
+    crate::{
+        block::Block,
+        tetherion::Tetherion
+    },
+    libp2p::{
+        floodsub::{Floodsub, FloodsubEvent, Topic},
+        identity,
+        mdns::{Mdns, MdnsEvent},
+        swarm::{NetworkBehaviourEventProcess, Swarm},
+        NetworkBehaviour,
+        PeerId
+    }
 };
 
-use libp2p::{
-    floodsub::{Floodsub, FloodsubEvent, Topic},
-    identity,
-    mdns::{Mdns, MdnsEvent},
-    swarm::{NetworkBehaviourEventProcess, Swarm},
-    NetworkBehaviour, PeerId,
-};
-use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -23,15 +25,15 @@ pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ChainResponse {
-    pub blocks: Vec<Block<String>>,
-    pub receiver: String,
+    pub tetherion: Tetherion<String>,
+    pub receiver: String
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LocalChainRequest {
-    pub from_peer_id: String,
+    pub from_peer_id: String
 }
 
 pub enum EventType {
@@ -65,7 +67,7 @@ impl TetherionBehaviour {
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
-                .expect("can create mdns"),
+                .expect("MDNS should be created"),
             response_sender,
             init_sender,
             tetherion
@@ -76,13 +78,13 @@ impl TetherionBehaviour {
         behaviour
     }
 
-    // We always choose the longest valid chain
+    /// We always choose the longest valid chain
     fn choose_chain(&self, local: Tetherion<String>, remote: Tetherion<String>) -> Tetherion<String> {
         let is_local_valid = local.is_valid().is_ok();
         let is_remote_valid = remote.is_valid().is_ok();
 
         if is_local_valid && is_remote_valid {
-            if local.blocks.len() >= remote.blocks.len() {
+            if local.blocks().len() >= remote.blocks().len() {
                 local
             } else {
                 remote
@@ -103,29 +105,24 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for TetherionBehaviour {
         if let FloodsubEvent::Message(msg) = event {
             if let Ok(resp) = serde_json::from_slice::<ChainResponse>(&msg.data) {
                 if resp.receiver == PEER_ID.to_string() {
-                    info!("Response from {}:", msg.source);
-                    resp.blocks.iter().for_each(|r| info!("{:?}", r));
-
-                    let mut remote = Tetherion::<String>::new(String::from("genesis"), 2);
-                    remote.blocks = resp.blocks;
-                    self.tetherion = self.choose_chain(self.tetherion.clone(), remote);
+                    log::info!("Response from {}:", msg.source);
+                    self.tetherion = self.choose_chain(self.tetherion.clone(), resp.tetherion);
                 }
             } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
-                info!("sending local chain to {}", msg.source.to_string());
-                let peer_id = resp.from_peer_id;
-                if PEER_ID.to_string() == peer_id {
+                log::info!("sending local chain to {}", msg.source.to_string());
+                if resp.from_peer_id == PEER_ID.to_string() {
                     if let Err(e) = self.response_sender.send(ChainResponse {
-                        blocks: self.tetherion.blocks.clone(),
+                        tetherion: self.tetherion.clone(),
                         receiver: msg.source.to_string(),
                     }) {
-                        error!("error sending response via channel, {}", e);
+                        log::error!("error sending response via channel, {}", e);
                     }
                 }
             } else if let Ok(block) = serde_json::from_slice::<Block<String>>(&msg.data) {
-                info!("received new block from {}", msg.source.to_string());
+                log::info!("received new block from {}", msg.source.to_string());
                 match self.tetherion.add_block(block) {
                     Ok(()) => (),
-                    Err(err) => error!("Error {}", err)
+                    Err(err) => log::error!("Error {}", err)
                 }
             }
         }
@@ -151,8 +148,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for TetherionBehaviour {
     }
 }
 
-pub fn get_list_peers(swarm: &Swarm<TetherionBehaviour>) -> Vec<String> {
-    info!("Discovered Peers:");
+pub fn get_peers(swarm: &Swarm<TetherionBehaviour>) -> Vec<String> {
     let nodes = swarm.behaviour().mdns.discovered_nodes();
     let mut unique_peers = HashSet::new();
     for peer in nodes {
@@ -162,15 +158,17 @@ pub fn get_list_peers(swarm: &Swarm<TetherionBehaviour>) -> Vec<String> {
 }
 
 pub fn handle_print_peers(swarm: &Swarm<TetherionBehaviour>) {
-    let peers = get_list_peers(swarm);
-    peers.iter().for_each(|p| info!("{}", p));
+    log::info!("Peers:");
+    let peers = get_peers(swarm);
+    peers.iter().for_each(|p| log::info!("{}", p));
 }
 
 pub fn handle_print_chain(swarm: &Swarm<TetherionBehaviour>) {
-    info!("Local Blockchain:");
-    let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().tetherion.blocks).expect("can jsonify blocks");
-    info!("{}", pretty_json);
+    log::info!("Local Tetherion blockchain:");
+    let json = serde_json::to_string_pretty(
+        &swarm.behaviour().tetherion.blocks()
+    ).expect("Blocks should be jsonified");
+    log::info!("{}", json);
 }
 
 pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<TetherionBehaviour>) {
@@ -178,20 +176,24 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<TetherionBehaviour>) {
         let behaviour = swarm.behaviour_mut();
         let latest_block = behaviour
             .tetherion
-            .blocks
+            .blocks()
             .last()
             .expect("there is at least one block");
         let block = Block::<String>::new(
             latest_block.id + 1,
             &latest_block.hash,
             data.to_owned(),
-            2
+            behaviour.tetherion.difficulty()
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
-        behaviour.tetherion.blocks.push(block);
-        info!("broadcasting new block");
-        behaviour
-            .floodsub
-            .publish(BLOCK_TOPIC.clone(), json.as_bytes());
+        match behaviour.tetherion.add_block(block) {
+            Ok(()) => {
+                log::info!("broadcasting new block");
+                behaviour
+                    .floodsub
+                    .publish(BLOCK_TOPIC.clone(), json.as_bytes());
+            },
+            Err(err) => log::error!("{}", err)
+        }
     }
 }
