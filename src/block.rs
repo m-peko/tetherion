@@ -41,6 +41,8 @@ impl<T: std::fmt::Display> Block<T> {
         block
     }
 
+    /// Gets the data contained in the block
+    #[allow(dead_code)]
     pub fn data(&self) -> &T {
         &self.data
     }
