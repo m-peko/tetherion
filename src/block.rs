@@ -41,6 +41,10 @@ impl<T: std::fmt::Display> Block<T> {
         block
     }
 
+    pub fn data(&self) -> &T {
+        &self.data
+    }
+
     /// Creates a genesis block
     pub fn genesis(data: T, difficulty: usize) -> Self {
         Block::<T>::new(0, "genesis", data, difficulty)
