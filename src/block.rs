@@ -41,6 +41,10 @@ impl<T: std::fmt::Display> Block<T> {
         block
     }
 
+    pub fn data(&self) -> &T {
+        &self.data
+    }
+
     /// Creates a genesis block
     pub fn genesis(data: T, difficulty: usize) -> Self {
         Block::<T>::new(0, "genesis", data, difficulty)
@@ -58,8 +62,9 @@ impl<T: std::fmt::Display> Block<T> {
     fn mine(&mut self, difficulty: usize) {
         log::info!("Mining the block...");
 
-        // Block should be mined only once, at its creation time
-        debug_assert_eq!(self.nonce, 0);
+        if self.nonce != 0 {
+            panic!("Block should be mined only once, at its creation time");
+        }
 
         loop {
             self.hash = hex::encode(Block::<T>::hash(self.hash_data().as_bytes()));
@@ -88,5 +93,41 @@ impl<T: std::fmt::Display> Block<T> {
         let mut hasher = Sha256::new();
         hasher.update(data);
         hasher.finalize().as_slice().to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_valid() {
+        const VALID_DIFFICULTY: usize = 2;
+        const INVALID_DIFFICULTY: usize = 3;
+
+        let block = Block::<String>::new(
+            0,
+            "some_previous_hash",
+            String::from("data"),
+            VALID_DIFFICULTY
+        );
+
+        assert!(block.is_valid(VALID_DIFFICULTY));
+        assert!(!block.is_valid(INVALID_DIFFICULTY));
+    }
+
+    #[test]
+    #[should_panic(expected = "Block should be mined only once, at its creation time")]
+    fn mine_multiple_times() {
+        const DIFFICULTY: usize = 2;
+
+        let mut block = Block::<String>::new(
+            0,
+            "some_previous_hash",
+            String::from("data"),
+            DIFFICULTY
+        );
+
+        block.mine(DIFFICULTY);
     }
 }

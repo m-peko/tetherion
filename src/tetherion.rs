@@ -88,3 +88,22 @@ impl<T: fmt::Display> Tetherion<T> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creation() {
+        const DIFFICULTY: usize = 2;
+        const GENESIS_DATA: &str = "genesis_data";
+
+        let tetherion = Tetherion::<String>::new(
+            String::from(GENESIS_DATA),
+            DIFFICULTY
+        );
+
+        assert_eq!(tetherion.blocks.len(), 1, "Only genesis block should be present in the blockchain on its creation");
+        assert_eq!(tetherion.blocks.last().unwrap().data(), GENESIS_DATA);
+    }
+}
