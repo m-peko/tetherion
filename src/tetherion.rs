@@ -57,6 +57,12 @@ impl<T: fmt::Display> Tetherion<T> {
         self.difficulty
     }
 
+    /// Gets the blockchain's creation timestamp
+    pub fn creation_timestamp(&self) -> i64 {
+        let genesis_block = self.blocks.first().expect("There should be at least genesis block in the blockchain!");
+        genesis_block.timestamp()
+    }
+
     /// Adds a new block to the blockchain
     pub fn add_block(&mut self, block: Block<T>) -> result::Result<(), InvalidBlockError> {
         let previous_block = self.blocks.last().expect("There should be at least one block in the blockchain!");

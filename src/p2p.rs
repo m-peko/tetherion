@@ -78,23 +78,29 @@ impl TetherionBehaviour {
         behaviour
     }
 
-    /// We always choose the longest valid chain
-    fn choose_chain(&self, local: Tetherion<String>, remote: Tetherion<String>) -> Tetherion<String> {
-        let is_local_valid = local.is_valid().is_ok();
-        let is_remote_valid = remote.is_valid().is_ok();
-
-        if is_local_valid && is_remote_valid {
-            if local.blocks().len() >= remote.blocks().len() {
-                local
-            } else {
-                remote
+    /// Checks whether remote blockchain is worse than the local one:
+    /// 1. by the validity
+    /// 2. in case both blockchains are valid, by the length
+    /// 3. in case both blockchains are of the same length, by the olderness
+    fn is_better_than(&self, remote: &Tetherion<String>) -> bool {
+        match (self.tetherion.is_valid(), remote.is_valid()) {
+            (Ok(()), Ok(())) => {
+                if self.tetherion.blocks().len() == remote.blocks().len() {
+                    return self.tetherion.creation_timestamp() <= remote.creation_timestamp();
+                }
+                self.tetherion.blocks().len() >= remote.blocks().len()
+            },
+            (Ok(()), Err(err)) => {
+                log::debug!("Remote blockchain is invalid: {}", err);
+                true
+            },
+            (Err(err), Ok(())) => {
+                log::debug!("Local blockchain is invalid: {}", err);
+                false
+            },
+            (Err(local_err), Err(remote_err)) => {
+                panic!("Local blockchain is invalid: {}, remote blockchain is invalid: {}", local_err, remote_err);
             }
-        } else if is_remote_valid && !is_local_valid {
-            remote
-        } else if !is_remote_valid && is_local_valid {
-            local
-        } else {
-            panic!("local and remote chains are both invalid");
         }
     }
 }
@@ -106,7 +112,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for TetherionBehaviour {
             if let Ok(resp) = serde_json::from_slice::<ChainResponse>(&msg.data) {
                 if resp.receiver == PEER_ID.to_string() {
                     log::info!("Response from {}:", msg.source);
-                    self.tetherion = self.choose_chain(self.tetherion.clone(), resp.tetherion);
+
+                    if !self.is_better_than(&resp.tetherion) {
+                        self.tetherion = resp.tetherion;
+                    }
                 }
             } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
                 log::info!("sending local chain to {}", msg.source.to_string());

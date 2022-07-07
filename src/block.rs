@@ -41,6 +41,11 @@ impl<T: std::fmt::Display> Block<T> {
         block
     }
 
+    /// Gets the block's timestamp
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp
+    }
+
     /// Gets the data contained in the block
     #[allow(dead_code)]
     pub fn data(&self) -> &T {
