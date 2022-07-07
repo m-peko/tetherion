@@ -1,3 +1,5 @@
+/// Copyright (c) 2022 Tetherion
+
 use libp2p::{
     core::upgrade,
     futures::StreamExt,
@@ -38,7 +40,7 @@ async fn main() {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 
-    let behaviour = p2p::AppBehaviour::new(tetherion::Tetherion::<String>::new(String::from("genesis"), 2), response_sender, init_sender.clone()).await;
+    let behaviour = p2p::TetherionBehaviour::new(tetherion::Tetherion::<String>::new(String::from("genesis"), 2), response_sender, init_sender.clone()).await;
 
     let mut swarm = SwarmBuilder::new(transp, behaviour, *p2p::PEER_ID)
         .executor(Box::new(|fut| {
@@ -82,7 +84,7 @@ async fn main() {
         if let Some(event) = evt {
             match event {
                 p2p::EventType::Init => {
-                    let peers = p2p::get_list_peers(&swarm);
+                    let peers = p2p::get_peers(&swarm);
 
                     info!("connected nodes: {}", peers.len());
                     if !peers.is_empty() {

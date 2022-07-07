@@ -2,7 +2,8 @@
 
 use {
     crate::block::Block,
-    std::{fmt, result}
+    std::{fmt, result},
+    serde::{Deserialize, Serialize}
 };
 
 #[derive(Debug)]
@@ -27,13 +28,13 @@ impl fmt::Display for InvalidBlockError {
 
 impl std::error::Error for InvalidBlockError {}
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tetherion<T: fmt::Display> {
     /// Blocks in the blockchain
-    pub blocks: Vec<Block<T>>,
+    blocks: Vec<Block<T>>,
 
     /// The difficulty of the blockchain, i.e. measure of how difficult it is to mine a block
-    pub difficulty: usize
+    difficulty: usize
 }
 
 impl<T: fmt::Display> Tetherion<T> {
@@ -44,6 +45,22 @@ impl<T: fmt::Display> Tetherion<T> {
             blocks: vec![genesis],
             difficulty: difficulty
         }
+    }
+
+    /// Gets all the blocks of the blockchain
+    pub fn blocks(&self) -> &Vec<Block<T>> {
+        &self.blocks
+    }
+
+    /// Gets the blockchain's difficulty
+    pub fn difficulty(&self) -> usize {
+        self.difficulty
+    }
+
+    /// Gets the blockchain's creation timestamp
+    pub fn creation_timestamp(&self) -> i64 {
+        let genesis_block = self.blocks.first().expect("There should be at least genesis block in the blockchain!");
+        genesis_block.timestamp()
     }
 
     /// Adds a new block to the blockchain
