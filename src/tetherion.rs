@@ -1,27 +1,33 @@
 /// Copyright (c) 2022 Tetherion
-
 use {
     crate::block::Block,
+    serde::{Deserialize, Serialize},
     std::{fmt, result},
-    serde::{Deserialize, Serialize}
 };
 
 #[derive(Debug)]
 pub enum InvalidBlockError {
     InvalidBlockId { id: u64, previous_id: u64 },
     InvalidPreviousHash { id: u64 },
-    InvalidDifficulty { id: u64, difficulty: usize }
+    InvalidDifficulty { id: u64, difficulty: usize },
 }
 
 impl fmt::Display for InvalidBlockError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            InvalidBlockError::InvalidBlockId { id, previous_id } =>
-                write!(f, "Block with ID {} does not follow up previous block's ID {}", id, previous_id),
-            InvalidBlockError::InvalidPreviousHash { id } =>
-                write!(f, "Block with ID {} has the wrong previous hash", id),
-            InvalidBlockError::InvalidDifficulty { id, difficulty } =>
-                write!(f, "Block with ID {} does not satisfy difficulty of {}", id, difficulty)
+            InvalidBlockError::InvalidBlockId { id, previous_id } => write!(
+                f,
+                "Block with ID {} does not follow up previous block's ID {}",
+                id, previous_id
+            ),
+            InvalidBlockError::InvalidPreviousHash { id } => {
+                write!(f, "Block with ID {} has the wrong previous hash", id)
+            }
+            InvalidBlockError::InvalidDifficulty { id, difficulty } => write!(
+                f,
+                "Block with ID {} does not satisfy difficulty of {}",
+                id, difficulty
+            ),
         }
     }
 }
@@ -34,7 +40,7 @@ pub struct Tetherion<T: fmt::Display> {
     blocks: Vec<Block<T>>,
 
     /// The difficulty of the blockchain, i.e. measure of how difficult it is to mine a block
-    difficulty: usize
+    difficulty: usize,
 }
 
 impl<T: fmt::Display> Tetherion<T> {
@@ -43,7 +49,7 @@ impl<T: fmt::Display> Tetherion<T> {
 
         Self {
             blocks: vec![genesis],
-            difficulty: difficulty
+            difficulty: difficulty,
         }
     }
 
@@ -59,19 +65,25 @@ impl<T: fmt::Display> Tetherion<T> {
 
     /// Gets the blockchain's creation timestamp
     pub fn creation_timestamp(&self) -> i64 {
-        let genesis_block = self.blocks.first().expect("There should be at least genesis block in the blockchain!");
+        let genesis_block = self
+            .blocks
+            .first()
+            .expect("There should be at least genesis block in the blockchain!");
         genesis_block.timestamp()
     }
 
     /// Adds a new block to the blockchain
     pub fn add_block(&mut self, block: Block<T>) -> result::Result<(), InvalidBlockError> {
-        let previous_block = self.blocks.last().expect("There should be at least one block in the blockchain!");
+        let previous_block = self
+            .blocks
+            .last()
+            .expect("There should be at least one block in the blockchain!");
         match Tetherion::<T>::is_valid_block(previous_block, &block, self.difficulty) {
             Ok(()) => {
                 self.blocks.push(block);
                 Ok(())
-            },
-            Err(err) => return Err(err)
+            }
+            Err(err) => return Err(err),
         }
     }
 
@@ -86,7 +98,7 @@ impl<T: fmt::Display> Tetherion<T> {
 
             match Tetherion::<T>::is_valid_block(previous_block, current_block, self.difficulty) {
                 Ok(()) => continue,
-                Err(err) => return Err(err)
+                Err(err) => return Err(err),
             };
         }
 
@@ -94,13 +106,23 @@ impl<T: fmt::Display> Tetherion<T> {
     }
 
     /// Checks if the block to be added is valid regarding the previous block in the blockchain
-    fn is_valid_block(previous_block: &Block<T>, block: &Block<T>, difficulty: usize) -> result::Result<(), InvalidBlockError> {
+    fn is_valid_block(
+        previous_block: &Block<T>,
+        block: &Block<T>,
+        difficulty: usize,
+    ) -> result::Result<(), InvalidBlockError> {
         if block.id != previous_block.id + 1 {
-            return Err(InvalidBlockError::InvalidBlockId{ id: block.id, previous_id: previous_block.id });
+            return Err(InvalidBlockError::InvalidBlockId {
+                id: block.id,
+                previous_id: previous_block.id,
+            });
         } else if block.previous_hash != previous_block.hash {
-            return Err(InvalidBlockError::InvalidPreviousHash{ id: block.id });
+            return Err(InvalidBlockError::InvalidPreviousHash { id: block.id });
         } else if !block.is_valid(difficulty) {
-            return Err(InvalidBlockError::InvalidDifficulty{ id: block.id, difficulty: difficulty });
+            return Err(InvalidBlockError::InvalidDifficulty {
+                id: block.id,
+                difficulty: difficulty,
+            });
         }
         Ok(())
     }
@@ -115,12 +137,13 @@ mod tests {
         const DIFFICULTY: usize = 2;
         const GENESIS_DATA: &str = "genesis_data";
 
-        let tetherion = Tetherion::<String>::new(
-            String::from(GENESIS_DATA),
-            DIFFICULTY
-        );
+        let tetherion = Tetherion::<String>::new(String::from(GENESIS_DATA), DIFFICULTY);
 
-        assert_eq!(tetherion.blocks.len(), 1, "Only genesis block should be present in the blockchain on its creation");
+        assert_eq!(
+            tetherion.blocks.len(),
+            1,
+            "Only genesis block should be present in the blockchain on its creation"
+        );
         assert_eq!(tetherion.blocks.last().unwrap().data(), GENESIS_DATA);
     }
 }
