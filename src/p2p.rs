@@ -1,18 +1,13 @@
 /// Copyright (c) 2022 Tetherion
-
 use {
-    crate::{
-        block::Block,
-        tetherion::Tetherion
-    },
+    crate::{block::Block, tetherion::Tetherion},
     libp2p::{
         floodsub::{Floodsub, FloodsubEvent, Topic},
         identity,
         mdns::{Mdns, MdnsEvent},
         swarm::{NetworkBehaviourEventProcess, Swarm},
-        NetworkBehaviour,
-        PeerId
-    }
+        NetworkBehaviour, PeerId,
+    },
 };
 
 use once_cell::sync::Lazy;
@@ -28,12 +23,12 @@ pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ChainResponse {
     pub tetherion: Tetherion<String>,
-    pub receiver: String
+    pub receiver: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LocalChainRequest {
-    pub from_peer_id: String
+    pub from_peer_id: String,
 }
 
 pub enum EventType {
@@ -54,7 +49,7 @@ pub struct TetherionBehaviour {
     pub init_sender: mpsc::UnboundedSender<bool>,
 
     #[behaviour(ignore)]
-    pub tetherion: Tetherion<String>
+    pub tetherion: Tetherion<String>,
 }
 
 impl TetherionBehaviour {
@@ -70,7 +65,7 @@ impl TetherionBehaviour {
                 .expect("MDNS should be created"),
             response_sender,
             init_sender,
-            tetherion
+            tetherion,
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_TOPIC.clone());
@@ -89,17 +84,20 @@ impl TetherionBehaviour {
                     return self.tetherion.creation_timestamp() <= remote.creation_timestamp();
                 }
                 self.tetherion.blocks().len() >= remote.blocks().len()
-            },
+            }
             (Ok(()), Err(err)) => {
                 log::debug!("Remote blockchain is invalid: {}", err);
                 true
-            },
+            }
             (Err(err), Ok(())) => {
                 log::debug!("Local blockchain is invalid: {}", err);
                 false
-            },
+            }
             (Err(local_err), Err(remote_err)) => {
-                panic!("Local blockchain is invalid: {}, remote blockchain is invalid: {}", local_err, remote_err);
+                panic!(
+                    "Local blockchain is invalid: {}, remote blockchain is invalid: {}",
+                    local_err, remote_err
+                );
             }
         }
     }
@@ -131,7 +129,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for TetherionBehaviour {
                 log::info!("received new block from {}", msg.source.to_string());
                 match self.tetherion.add_block(block) {
                     Ok(()) => (),
-                    Err(err) => log::error!("Error {}", err)
+                    Err(err) => log::error!("Error {}", err),
                 }
             }
         }
@@ -174,9 +172,8 @@ pub fn handle_print_peers(swarm: &Swarm<TetherionBehaviour>) {
 
 pub fn handle_print_chain(swarm: &Swarm<TetherionBehaviour>) {
     log::info!("Local Tetherion blockchain:");
-    let json = serde_json::to_string_pretty(
-        &swarm.behaviour().tetherion.blocks()
-    ).expect("Blocks should be jsonified");
+    let json = serde_json::to_string_pretty(&swarm.behaviour().tetherion.blocks())
+        .expect("Blocks should be jsonified");
     log::info!("{}", json);
 }
 
@@ -192,7 +189,7 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<TetherionBehaviour>) {
             latest_block.id + 1,
             &latest_block.hash,
             data.to_owned(),
-            behaviour.tetherion.difficulty()
+            behaviour.tetherion.difficulty(),
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
         match behaviour.tetherion.add_block(block) {
@@ -201,8 +198,8 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<TetherionBehaviour>) {
                 behaviour
                     .floodsub
                     .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-            },
-            Err(err) => log::error!("{}", err)
+            }
+            Err(err) => log::error!("{}", err),
         }
     }
 }

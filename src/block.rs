@@ -1,8 +1,7 @@
 /// Copyright (c) 2022 Tetherion
-
 use {
     serde::{Deserialize, Serialize},
-    sha2::{Digest, Sha256}
+    sha2::{Digest, Sha256},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -23,7 +22,7 @@ pub struct Block<T: std::fmt::Display> {
     nonce: u64,
 
     /// The data stored in the block
-    data: T
+    data: T,
 }
 
 impl<T: std::fmt::Display> Block<T> {
@@ -34,7 +33,7 @@ impl<T: std::fmt::Display> Block<T> {
             previous_hash: String::from(previous_hash),
             timestamp: chrono::Utc::now().timestamp(),
             nonce: 0,
-            data: data
+            data: data,
         };
 
         block.mine(difficulty);
@@ -116,7 +115,7 @@ mod tests {
             0,
             "some_previous_hash",
             String::from("data"),
-            VALID_DIFFICULTY
+            VALID_DIFFICULTY,
         );
 
         assert!(block.is_valid(VALID_DIFFICULTY));
@@ -128,12 +127,8 @@ mod tests {
     fn mine_multiple_times() {
         const DIFFICULTY: usize = 2;
 
-        let mut block = Block::<String>::new(
-            0,
-            "some_previous_hash",
-            String::from("data"),
-            DIFFICULTY
-        );
+        let mut block =
+            Block::<String>::new(0, "some_previous_hash", String::from("data"), DIFFICULTY);
 
         block.mine(DIFFICULTY);
     }

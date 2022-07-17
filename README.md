@@ -5,7 +5,9 @@
 &nbsp;
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)](https://github.com/m-peko/bitflags/blob/master/LICENSE)
-![Status](https://github.com/m-peko/tetherion/actions/workflows/tetherion.yml/badge.svg)
+![Build](https://github.com/m-peko/tetherion/actions/workflows/build.yml/badge.svg)
+![Test](https://github.com/m-peko/tetherion/actions/workflows/test.yml/badge.svg)
+![Lint](https://github.com/m-peko/tetherion/actions/workflows/lint.yml/badge.svg)
 
 Blockchain implementation in Rust.
 
